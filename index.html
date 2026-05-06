@@ -1,1 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>JobLink - Smart Job Platform</title>
+    <!-- Firebase SDKs (modular) -->
+    <script type="module">
+        // --------------------------------------------------------------
+        // FIREBASE CONFIGURATION - REPLACE WITH YOUR OWN CREDENTIALS
+        // --------------------------------------------------------------
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, query, where, orderBy, Timestamp, addDoc, arrayUnion, arrayRemove, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
+        // 🔥 REPLACE WITH YOUR FIREBASE PROJECT CONFIG
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // Collections references
+        const usersCol = collection(db, "users");
+        const jobsCol = collection(db, "jobs");
+        const applicationsCol = collection(db, "applications");
+        const savedJobsCol = collection(db, "savedJobs");
+
+        // Global state
+        let currentUser = null;
+        let userRole = null;
+        let currentUserId = null;
+        let jobsUnsubscribe = null;
+        let notificationsUnsubscribe = null;
+
+        // DOM Elements
+        const appContainer = document.getElementById("app");
+
+        // Helper: show toast notification
+        function showToast(message, type = "info") {
+            const toast = document.createElement("div");
+            toast.className = `toast-notification ${type}`;
+            toast.innerText = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3500);
+        }
+
+        // Helper: format date
+        function formatDate(timestamp) {
+            if (!timestamp) return "recent";
+            const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+            return date.toLocaleDateString();
+        }
+
+        // Helper: check if boost is active
+        function isBoostActive(job) {
+            if (!job.boosted) return false;
+            if (!job.boostExpiry) return false;
+            const expiry = job.boostExpiry.toDate ? job.boostExpiry.toDate() : new Date(job.boostExpiry);
+            return expiry > new Date();
+        }
+
+        // ---------- AUTH UI ----------
+        function renderAuthScreen() {
+            appContainer.innerHTML = `
+                <div class="auth-container">
+                    <div class="auth-card">
+                        <div class="logo-large">
+                            <span class="logo-icon">💼🔗</span>
+                            <h2>JobLink</h2>
+                            <p>Connect | Hire | Grow</p>
+                        </div>
+                        <div class="tab-buttons">
+                            <button id="loginTab" class="tab-active">Login</button>
+                            <button id="signupTab">Sign Up</button>
+                        </div>
+                        <div id="loginForm">
+                            <input type="email" id="loginEmail" placeholder="Email" />
+                            <input type="password" id="loginPassword" placeholder="Password" />
+                            <button id="doLogin">Login</button>
+                        </div>
+                        <div id="signupForm" style="display:none;">
+                            <input type="text" id="signupName" placeholder="Full Name" />
+                            <input type="email" id="signupEmail" placeholder="Email" />
+                            <input type="password" id="signupPassword" placeholder="Password" />
+                            <select id="signupRole">
+                                <option value="Job Seeker">Job Seeker</option>
+                                <option value="Employer">Employer</option>
+                                <option value="Admin">Admin</option>
+                            </select>
+                            <button id="doSignup">Create Account</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById("loginTab").onclick = () => {
+                document.getElementById("loginForm").style.display = "block";
+                document.getElementById("signupForm").style.display = "none";
+                document.getElementById("loginTab").classList.add("tab-active");
+                document.getElementById("signupTab").classList.remove("tab-active");
+            };
+            document.getElementById("signupTab").onclick = () => {
+                document.getElementById("loginForm").style.display = "none";
+                document.getElementById("signupForm").style.display = "block";
+                document.getElementById("signupTab").classList.add("tab-active");
+                document.getElementById("loginTab").classList.remove("tab-active");
+            };
+
+            document.getElementById("doLogin").onclick = async () => {
+                const email = document.getElementById("loginEmail").value;
+                const pwd = document.getElementById("loginPassword").value;
+                try {
+                    await signInWithEmailAndPassword(auth, email, pwd);
+                    showToast("Login successful!", "success");
+                } catch (err) { showToast(err.message, "error"); }
+            };
+            document.getElementById("doSignup").onclick = async () => {
+                const name = document.getElementById("signupName").value;
+                const email = document.getElementById("signupEmail").value;
+                const pwd = document.getElementById("signupPassword").value;
+                const role = document.getElementById("signupRole").value;
+                if (!name || !email || !pwd) return showToast("All fields required", "error");
+                try {
+                    const cred = await createUserWithEmailAndPassword(auth, email, pwd);
+                    await setDoc(doc(usersCol, cred.user.uid), {
+                        name, email, role, createdAt: Timestamp.now()
+                    });
+                    showToast("Account created!", "success");
+                } catch (err) { showToast(err.message, "error"); }
+            };
+        }
+
+        // Main Dashboard Router
+        function renderDashboard() {
+            if (!currentUser) return renderAuthScreen();
+            if (userRole === "Job Seeker") renderJobSeekerDashboard();
+            else if (userRole === "Employer") renderEmployerDashboard();
+            else if (userRole === "Admin") renderAdminDashboard();
+            else renderAuthScreen();
+        }
+
+        // ---------- JOB SEEKER DASHBOARD ----------
+        let currentSavedJobsSet = new Set();
+        let allJobsCache = [];
+
+        async function fetchSavedJobsSet() {
+            const q = query(savedJobsCol, where("userId", "==", currentUserId));
+            const snap = await getDocs(q);
+            currentSavedJobsSet.clear();
+            snap.forEach(d => currentSavedJobsSet.add(d.data().jobId));
+        }
+
+        async function toggleSaveJob(jobId) {
+            if (!currentUserId) return;
+            const savedRef = doc(savedJobsCol, `${currentUserId}_${jobId}`);
+            if (currentSavedJobsSet.has(jobId)) {
+                await deleteDoc(savedRef);
+                currentSavedJobsSet.delete(jobId);
+                showToast("Job removed from bookmarks", "info");
+            } else {
+                await setDoc(savedRef, { userId: currentUserId, jobId, savedAt: Timestamp.now() });
+                currentSavedJobsSet.add(jobId);
+                showToast("Job saved!", "success");
+            }
+            renderJobSeekerDashboard(); // refresh cards UI
+        }
+
+        function sortJobsWithBoost(jobs) {
+            return [...jobs].sort((a,b) => {
+                const boostA = isBoostActive(a);
+                const boostB = isBoostActive(b);
+                if (boostA && !boostB) return -1;
+                if (!boostA && boostB) return 1;
+                return (b.timestamp?.toMillis() || 0) - (a.timestamp?.toMillis() || 0);
+            });
+        }
+
+        function renderJobCards(jobs, seekerSearch = "") {
+            const filtered = jobs.filter(job => {
+                if (!seekerSearch) return true;
+                const s = seekerSearch.toLowerCase();
+                return job.title?.toLowerCase().includes(s) ||
+                       job.category?.toLowerCase().includes(s) ||
+                       job.location?.toLowerCase().includes(s);
+            });
+            const sorted = sortJobsWithBoost(filtered);
+            if (sorted.length === 0) return `<div class="empty-state">✨ No jobs found</div>`;
+            return sorted.map(job => `
+                <div class="job-card" data-job-id="${job.id}">
+                    <div class="job-card-header">
+                        <h3>${escapeHtml(job.title)}</h3>
+                        ${isBoostActive(job) ? '<span class="boost-badge">⚡ BOOSTED</span>' : ''}
+                    </div>
+                    <p class="company">🏢 ${escapeHtml(job.employerName || "Company")}</p>
+                    <p>📍 ${escapeHtml(job.location)} | 💰 ${escapeHtml(job.salary || "Negotiable")}</p>
+                    <p class="category-tag">${escapeHtml(job.category || "General")}</p>
+                    <div class="job-actions">
+                        <button class="details-btn" data-id="${job.id}">🔍 Details</button>
+                        <button class="apply-btn" data-id="${job.id}">📩 Apply</button>
+                        <button class="save-btn ${currentSavedJobsSet.has(job.id) ? 'saved' : ''}" data-id="${job.id}">
+                            ${currentSavedJobsSet.has(job.id) ? "❤️ Saved" : "🤍 Save"}
+                        </button>
+                    </div>
+                </div>
+            `).join("");
+        }
+
+        async function renderJobSeekerDashboard() {
+            await fetchSavedJobsSet();
+            const snapshot = await getDocs(jobsCol);
+            let jobs = [];
+            snapshot.forEach(docSnap => jobs.push({ id: docSnap.id, ...docSnap.data() }));
+            allJobsCache = jobs;
+
+            appContainer.innerHTML = `
+                <nav class="navbar">
+                    <div class="logo">
+                        <span class="logo-icon">💼🔗</span>
+                        <span>JobLink</span>
+                    </div>
+                    <div class="nav-links">
+                        <button class="nav-btn active" data-nav="home">🏠 Home</button>
+                        <button class="nav-btn" data-nav="jobs">📋 Jobs</button>
+                        <button class="nav-btn" data-nav="profile">👤 Profile</button>
+                        <button class="logout-btn">🚪 Logout</button>
+                    </div>
+                </nav>
+                <div class="dashboard-content" id="dashboardContent">
+                    <div id="homeView" class="view active">
+                        <h2>🔥 Latest Opportunities</h2>
+                        <div class="search-bar">
+                            <input type="text" id="searchJobs" placeholder="Search by title, category or location..." />
+                        </div>
+                        <div id="jobsContainer" class="jobs-grid">${renderJobCards(jobs)}</div>
+                    </div>
+                    <div id="jobsView" class="view">
+                        <h2>📌 All Job Listings</h2>
+                        <div class="search-bar"><input type="text" id="jobsSearch" placeholder="Filter jobs..." /></div>
+                        <div id="allJobsContainer" class="jobs-grid">${renderJobCards(jobs)}</div>
+                    </div>
+                    <div id="profileView" class="view">
+                        <h2>👤 My Profile</h2>
+                        <p><strong>Name:</strong> ${escapeHtml(currentUser.displayName || currentUser.email)}</p>
+                        <p><strong>Email:</strong> ${currentUser.email}</p>
+                        <p><strong>Role:</strong> Job Seeker</p>
+                        <hr />
+                        <h3>📚 Bookmarked Jobs</h3>
+                        <div id="savedJobsList" class="jobs-grid"></div>
+                    </div>
+                </div>
+            `;
+            // attach nav events
+            document.querySelectorAll(".nav-btn").forEach(btn => {
+                btn.onclick = () => {
+                    const viewId = btn.dataset.nav + "View";
+                    document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+                    document.getElementById(viewId).classList.add("active");
+                    document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
+                    btn.classList.add("active");
+                    if (viewId === "profileView") loadSavedJobsList();
+                };
+            });
+            document.querySelector(".logout-btn").onclick = () => signOut(auth);
+
+            // search listeners
+            const searchHome = document.getElementById("searchJobs");
+            if (searchHome) searchHome.addEventListener("input", (e) => {
+                const filtered = allJobsCache.filter(job => {
+                    const s = e.target.value.toLowerCase();
+                    return job.title?.toLowerCase().includes(s) || job.category?.toLowerCase().includes(s) || job.location?.toLowerCase().includes(s);
+                });
+                document.getElementById("jobsContainer").innerHTML = renderJobCards(filtered);
+            });
+            const searchJobsPage = document.getElementById("jobsSearch");
+            if (searchJobsPage) searchJobsPage.addEventListener("input", (e) => {
+                const filtered = allJobsCache.filter(job => {
+                    const s = e.target.value.toLowerCase();
+                    return job.title?.toLowerCase().includes(s) || job.category?.toLowerCase().includes(s) || job.location?.toLowerCase().includes(s);
+                });
+                document.getElementById("allJobsContainer").innerHTML = renderJobCards(filtered);
+            });
+
+            // global event listeners for details/apply/save
+            document.addEventListener("click", async (e) => {
+                const detailsBtn = e.target.closest(".details-btn");
+                const applyBtn = e.target.closest(".apply-btn");
+                const saveBtn = e.target.closest(".save-btn");
+                if (detailsBtn) {
+                    const jobId = detailsBtn.dataset.id;
+                    const job = allJobsCache.find(j => j.id === jobId);
+                    if (job) showJobDetailsModal(job);
+                } else if (applyBtn) {
+                    const jobId = applyBtn.dataset.id;
+                    const job = allJobsCache.find(j => j.id === jobId);
+                    if (job) showApplyModal(job);
+                } else if (saveBtn) {
+                    const jobId = saveBtn.dataset.id;
+                    await toggleSaveJob(jobId);
+                }
+            });
+            await loadSavedJobsList();
+        }
+
+        async function loadSavedJobsList() {
+            const container = document.getElementById("savedJobsList");
+            if (!container) return;
+            const q = query(savedJobsCol, where("userId", "==", currentUserId));
+            const savedSnap = await getDocs(q);
+            const savedJobIds = savedSnap.docs.map(d => d.data().jobId);
+            if (savedJobIds.length === 0) {
+                container.innerHTML = "<div class='empty-state'>No saved jobs yet</div>";
+                return;
+            }
+            const jobsSnapshot = await getDocs(jobsCol);
+            const savedJobs = [];
+            jobsSnapshot.forEach(docSnap => {
+                if (savedJobIds.includes(docSnap.id)) savedJobs.push({ id: docSnap.id, ...docSnap.data() });
+            });
+            container.innerHTML = renderJobCards(savedJobs);
+        }
+
+        function showJobDetailsModal(job) {
+            const modal = document.createElement("div");
+            modal.className = "modal";
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <h2>${escapeHtml(job.title)}</h2>
+                    <p><strong>🏢 Company:</strong> ${escapeHtml(job.employerName)}</p>
+                    <p><strong>📍 Location:</strong> ${escapeHtml(job.location)}</p>
+                    <p><strong>💰 Salary:</strong> ${escapeHtml(job.salary)}</p>
+                    <p><strong>📂 Category:</strong> ${escapeHtml(job.category)}</p>
+                    <p><strong>📞 Contact:</strong> ${escapeHtml(job.contactInfo || "Not provided")}</p>
+                    <p><strong>📝 Description:</strong></p>
+                    <p>${escapeHtml(job.description)}</p>
+                    <button class="close-modal">Close</button>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            modal.querySelector(".close-modal").onclick = () => modal.remove();
+        }
+
+        function showApplyModal(job) {
+            const modal = document.createElement("div");
+            modal.className = "modal";
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <h3>Apply for ${escapeHtml(job.title)}</h3>
+                    <input type="text" id="applicantName" placeholder="Full Name" value="${escapeHtml(currentUser.displayName || currentUser.email)}" />
+                    <input type="email" id="applicantEmail" placeholder="Email" value="${currentUser.email}" />
+                    <textarea id="applicantMsg" placeholder="Why are you a good fit?"></textarea>
+                    <button id="submitApplication">Submit Application</button>
+                    <button class="close-modal">Cancel</button>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            const submitBtn = modal.querySelector("#submitApplication");
+            submitBtn.onclick = async () => {
+                const name = modal.querySelector("#applicantName").value;
+                const email = modal.querySelector("#applicantEmail").value;
+                const msg = modal.querySelector("#applicantMsg").value;
+                if (!name || !email) return showToast("Name and email required", "error");
+                await addDoc(applicationsCol, {
+                    jobId: job.id,
+                    applicantId: currentUserId,
+                    name, email, message: msg,
+                    timestamp: Timestamp.now()
+                });
+                showToast("Application sent!", "success");
+                modal.remove();
+            };
+            modal.querySelector(".close-modal").onclick = () => modal.remove();
+        }
+
+        // ---------- EMPLOYER DASHBOARD ----------
+        async function renderEmployerDashboard() {
+            const jobsQuery = query(jobsCol, where("employerId", "==", currentUserId), orderBy("timestamp", "desc"));
+            const jobsSnap = await getDocs(jobsQuery);
+            let employerJobs = [];
+            jobsSnap.forEach(d => employerJobs.push({ id: d.id, ...d.data() }));
+
+            appContainer.innerHTML = `
+                <nav class="navbar">
+                    <div class="logo">
+                        <span class="logo-icon">💼🔗</span>
+                        <span>JobLink (Employer)</span>
+                    </div>
+                    <div class="nav-links">
+                        <button class="nav-btn active" data-nav="myjobs">📌 My Jobs</button>
+                        <button class="nav-btn" data-nav="postjob">➕ Post Job</button>
+                        <button class="nav-btn" data-nav="profile">👤 Profile</button>
+                        <button class="logout-btn">🚪 Logout</button>
+                    </div>
+                </nav>
+                <div class="dashboard-content">
+                    <div id="myjobsView" class="view active">
+                        <h2>Your Job Listings</h2>
+                        <div id="employerJobsContainer" class="jobs-grid">${renderEmployerJobCards(employerJobs)}</div>
+                    </div>
+                    <div id="postjobView" class="view">
+                        <h2>Post a New Job</h2>
+                        <form id="newJobForm" class="job-form">
+                            <input id="jobTitle" placeholder="Job Title" required />
+                            <textarea id="jobDesc" placeholder="Job Description" required></textarea>
+                            <input id="jobSalary" placeholder="Salary (e.g., $50k - $70k)" />
+                            <input id="jobLocation" placeholder="Location" required />
+                            <input id="jobCategory" placeholder="Category (e.g., Tech, Sales)" required />
+                            <input id="jobContact" placeholder="Contact (WhatsApp/Email)" required />
+                            <button type="submit">Post Job ✨</button>
+                        </form>
+                    </div>
+                    <div id="profileView" class="view">
+                        <h2>Employer Profile</h2>
+                        <p>Name: ${escapeHtml(currentUser.displayName || currentUser.email)}</p>
+                        <p>Email: ${currentUser.email}</p>
+                    </div>
+                </div>
+            `;
+            attachEmployerNav();
+            document.getElementById("newJobForm").onsubmit = async (e) => {
+                e.preventDefault();
+                const title = document.getElementById("jobTitle").value;
+                const description = document.getElementById("jobDesc").value;
+                const salary = document.getElementById("jobSalary").value;
+                const location = document.getElementById("jobLocation").value;
+                const category = document.getElementById("jobCategory").value;
+                const contactInfo = document.getElementById("jobContact").value;
+                if (!title || !description || !location || !category) return showToast("Fill required fields", "error");
+                await addDoc(jobsCol, {
+                    title, description, salary, location, category, contactInfo,
+                    employerId: currentUserId,
+                    employerName: currentUser.displayName || currentUser.email,
+                    timestamp: Timestamp.now(),
+                    boosted: false,
+                    boostExpiry: null
+                });
+                showToast("Job posted!", "success");
+                renderEmployerDashboard();
+            };
+        }
+
+        function renderEmployerJobCards(jobs) {
+            if (jobs.length === 0) return "<div class='empty-state'>No jobs posted yet</div>";
+            return jobs.map(job => `
+                <div class="job-card" data-job-id="${job.id}">
+                    <h3>${escapeHtml(job.title)}</h3>
+                    <p>${escapeHtml(job.location)} | ${escapeHtml(job.salary)}</p>
+                    <p class="category-tag">${escapeHtml(job.category)}</p>
+                    ${isBoostActive(job) ? '<span class="boost-badge">🚀 Boosted</span>' : ''}
+                    <div class="employer-actions">
+                        <button class="view-applicants-btn" data-id="${job.id}">👥 Applicants</button>
+                        <button class="edit-job-btn" data-id="${job.id}">✏️ Edit</button>
+                        <button class="delete-job-btn" data-id="${job.id}">🗑️ Delete</button>
+                        ${!isBoostActive(job) ? `<button class="boost-job-btn" data-id="${job.id}">⚡ Boost (Top)</button>` : ''}
+                    </div>
+                </div>
+            `).join("");
+        }
+
+        function attachEmployerNav() {
+            document.querySelectorAll(".nav-btn").forEach(btn => {
+                btn.onclick = () => {
+                    const viewId = btn.dataset.nav + "View";
+                    document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+                    if (document.getElementById(viewId)) document.getElementById(viewId).classList.add("active");
+                    document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
+                    btn.classList.add("active");
+                    if (btn.dataset.nav === "myjobs") renderEmployerDashboard();
+                };
+            });
+            document.querySelector(".logout-btn").onclick = () => signOut(auth);
+            document.addEventListener("click", async (e) => {
+                const applicantsBtn = e.target.closest(".view-applicants-btn");
+                const editBtn = e.target.closest(".edit-job-btn");
+                const deleteBtn = e.target.closest(".delete-job-btn");
+                const boostBtn = e.target.closest(".boost-job-btn");
+                if (applicantsBtn) {
+                    const jobId = applicantsBtn.dataset.id;
+                    const q = query(applicationsCol, where("jobId", "==", jobId));
+                    const snap = await getDocs(q);
+                    let list = "<ul>";
+                    snap.forEach(d => { const app = d.data(); list += `<li><strong>${escapeHtml(app.name)}</strong> (${app.email}): ${escapeHtml(app.message)}</li>`; });
+                    list += "</ul>";
+                    if (snap.empty) list = "<p>No applications yet</p>";
+                    showModal(`Applicants for job`, list);
+                } else if (editBtn) {
+                    const jobId = editBtn.dataset.id;
+                    const jobDoc = await getDoc(doc(jobsCol, jobId));
+                    const job = jobDoc.data();
+                    showEditJobModal(jobId, job);
+                } else if (deleteBtn) {
+                    if (confirm("Delete this job?")) await deleteDoc(doc(jobsCol, deleteBtn.dataset.id));
+                    renderEmployerDashboard();
+                } else if (boostBtn) {
+                    const jobId = boostBtn.dataset.id;
+                    const expiryDate = new Date();
+                    expiryDate.setDate(expiryDate.getDate() + 30);
+                    await updateDoc(doc(jobsCol, jobId), { boosted: true, boostExpiry: Timestamp.fromDate(expiryDate) });
+                    showToast("Job boosted for 30 days!", "success");
+                    renderEmployerDashboard();
+                }
+            });
+        }
+
+        async function showEditJobModal(jobId, jobData) {
+            const modal = document.createElement("div");
+            modal.className = "modal";
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <h3>Edit Job</h3>
+                    <input id="editTitle" value="${escapeHtml(jobData.title)}" placeholder="Title" />
+                    <textarea id="editDesc" placeholder="Description">${escapeHtml(jobData.description)}</textarea>
+                    <input id="editSalary" value="${escapeHtml(jobData.salary || '')}" placeholder="Salary" />
+                    <input id="editLocation" value="${escapeHtml(jobData.location)}" placeholder="Location" />
+                    <input id="editCategory" value="${escapeHtml(jobData.category)}" placeholder="Category" />
+                    <input id="editContact" value="${escapeHtml(jobData.contactInfo || '')}" placeholder="Contact" />
+                    <button id="saveEdit">Save Changes</button>
+                    <button class="close-modal">Cancel</button>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            modal.querySelector("#saveEdit").onclick = async () => {
+                const updates = {
+                    title: modal.querySelector("#editTitle").value,
+                    description: modal.querySelector("#editDesc").value,
+                    salary: modal.querySelector("#editSalary").value,
+                    location: modal.querySelector("#editLocation").value,
+                    category: modal.querySelector("#editCategory").value,
+                    contactInfo: modal.querySelector("#editContact").value,
+                };
+                await updateDoc(doc(jobsCol, jobId), updates);
+                showToast("Job updated");
+                modal.remove();
+                renderEmployerDashboard();
+            };
+            modal.querySelector(".close-modal").onclick = () => modal.remove();
+        }
+
+        // ---------- ADMIN DASHBOARD ----------
+        async function renderAdminDashboard() {
+            const usersSnap = await getDocs(usersCol);
+            const jobsSnap = await getDocs(jobsCol);
+            const users = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            const jobs = jobsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            appContainer.innerHTML = `
+                <nav class="navbar">
+                    <div class="logo"><span class="logo-icon">🛡️🔗</span> JobLink Admin</div>
+                    <button class="logout-btn">Logout</button>
+                </nav>
+                <div class="admin-panel">
+                    <h2>All Users</h2>
+                    <div class="admin-table">${users.map(u => `<div class="admin-row">${u.email} (${u.role}) <button class="del-user" data-id="${u.id}">Delete</button></div>`).join('')}</div>
+                    <h2>All Jobs</h2>
+                    <div class="admin-table">${jobs.map(j => `<div class="admin-row">${j.title} - ${j.employerName} <button class="del-job" data-id="${j.id}">Delete</button></div>`).join('')}</div>
+                </div>
+            `;
+            document.querySelector(".logout-btn").onclick = () => signOut(auth);
+            document.querySelectorAll(".del-user").forEach(btn => btn.onclick = async () => {
+                if(confirm("Delete user?")) await deleteDoc(doc(usersCol, btn.dataset.id));
+                renderAdminDashboard();
+            });
+            document.querySelectorAll(".del-job").forEach(btn => btn.onclick = async () => {
+                if(confirm("Delete job?")) await deleteDoc(doc(jobsCol, btn.dataset.id));
+                renderAdminDashboard();
+            });
+        }
+
+        // Notifications (real-time new jobs for job seekers)
+        function setupNewJobNotifications() {
+            if (notificationsUnsubscribe) notificationsUnsubscribe();
+            if (userRole !== "Job Seeker") return;
+            notificationsUnsubscribe = onSnapshot(query(jobsCol, orderBy("timestamp", "desc")), (snapshot) => {
+                snapshot.docChanges().forEach(change => {
+                    if (change.type === "added") {
+                        const job = change.doc.data();
+                        if (job.timestamp && (job.timestamp.toMillis() > (Date.now() - 5000))) {
+                            showToast(`📢 New job: ${job.title} (${job.category}) in ${job.location}`, "info");
+                        }
+                    }
+                });
+            });
+        }
+
+        function escapeHtml(str) { if(!str) return ''; return str.replace(/[&<>]/g, function(m){if(m==='&') return '&amp;'; if(m==='<') return '&lt;'; if(m==='>') return '&gt;'; return m;}); }
+        function showModal(title, contentHtml) {
+            const modalDiv = document.createElement("div"); modalDiv.className = "modal";
+            modalDiv.innerHTML = `<div class="modal-content"><h3>${title}</h3>${contentHtml}<button class="close-modal">Close</button></div>`;
+            document.body.appendChild(modalDiv);
+            modalDiv.querySelector(".close-modal").onclick = () => modalDiv.remove();
+        }
+
+        // Auth state listener
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                currentUser = user;
+                currentUserId = user.uid;
+                const userDoc = await getDoc(doc(usersCol, user.uid));
+                if (userDoc.exists()) userRole = userDoc.data().role;
+                else userRole = "Job Seeker";
+                currentUser.displayName = userDoc.data()?.name || user.email;
+                setupNewJobNotifications();
+                renderDashboard();
+            } else {
+                if (notificationsUnsubscribe) notificationsUnsubscribe();
+                currentUser = null; userRole = null; currentUserId = null;
+                renderAuthScreen();
+            }
+        });
+
+        window.showToast = showToast;
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui, 'Segoe UI', sans-serif; }
+        body { background: #f4f7fc; }
+        .auth-container { display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 1rem; }
+        .auth-card { background: white; border-radius: 32px; padding: 2rem; width: 100%; max-width: 420px; box-shadow: 0 20px 35px rgba(0,0,0,0.1); text-align: center; }
+        .logo-large { margin-bottom: 1.5rem; }
+        .logo-large .logo-icon { font-size: 3rem; display: block; }
+        .logo-large h2 { font-size: 2rem; color: #1e3b4a; margin: 0.25rem 0; }
+        .logo-large p { color: #6c757d; font-size: 0.9rem; }
+        .tab-buttons { display: flex; gap: 1rem; margin-bottom: 1.5rem; }
+        .tab-buttons button { flex:1; background: none; border: none; padding: 0.75rem; font-weight: 600; border-radius: 40px; cursor: pointer; transition: 0.2s; }
+        .tab-active { background: #2c7da0; color: white; }
+        input, select, textarea { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ccc; border-radius: 28px; font-size: 1rem; }
+        button { background: #2c7da0; color: white; border: none; padding: 12px; border-radius: 40px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        button:hover { opacity: 0.9; transform: scale(0.98); }
+        .navbar { display: flex; justify-content: space-between; align-items: center; background: white; padding: 1rem 1.5rem; box-shadow: 0 2px 12px rgba(0,0,0,0.05); flex-wrap: wrap; gap: 10px; }
+        .logo { display: flex; align-items: center; gap: 8px; font-size: 1.5rem; font-weight: bold; color: #1e3b4a; }
+        .logo-icon { font-size: 1.7rem; }
+        .nav-links { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+        .nav-btn, .logout-btn { background: #eef2f5; color: #1e3b4a; padding: 8px 16px; border-radius: 40px; }
+        .logout-btn { background: #dc3545; color: white; }
+        .dashboard-content { max-width: 1400px; margin: 2rem auto; padding: 0 1rem; }
+        .view { display: none; }
+        .view.active { display: block; }
+        .jobs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem; margin-top: 1.5rem; }
+        .job-card { background: white; border-radius: 28px; padding: 1.25rem; box-shadow: 0 8px 20px rgba(0,0,0,0.05); transition: all 0.2s; border: 1px solid #e9ecef; }
+        .job-card-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+        .boost-badge { background: #ffb347; color: #2c2c2c; font-size: 0.7rem; font-weight: bold; padding: 4px 8px; border-radius: 40px; }
+        .company { color: #2c7da0; font-weight: 600; margin: 8px 0; }
+        .category-tag { background: #e2eaf1; display: inline-block; padding: 4px 12px; border-radius: 40px; font-size: 0.75rem; margin-top: 8px; }
+        .job-actions, .employer-actions { margin-top: 1rem; display: flex; gap: 8px; flex-wrap: wrap; }
+        .save-btn.saved { background: #ff6b6b; color: white; }
+        .search-bar input { width: 100%; border-radius: 60px; background: white; }
+        .modal { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .modal-content { background: white; max-width: 500px; width: 90%; border-radius: 32px; padding: 1.5rem; max-height: 80vh; overflow-y: auto; }
+        .empty-state { text-align: center; padding: 3rem; color: #6c757d; }
+        .admin-panel { background: white; border-radius: 32px; padding: 2rem; margin: 2rem; }
+        .admin-row { display: flex; justify-content: space-between; padding: 12px; border-bottom: 1px solid #ddd; align-items: center; }
+        .toast-notification { position: fixed; bottom: 20px; left: 20px; background: #333; color: white; padding: 12px 24px; border-radius: 60px; z-index: 2000; animation: fadein 0.3s; }
+        .toast-notification.success { background: #28a745; }
+        .toast-notification.error { background: #dc3545; }
+        @keyframes fadein { from { opacity:0; transform: translateY(20px);} to { opacity:1; transform: translateY(0);} }
+        @media (max-width: 640px) { .navbar { flex-direction: column; align-items: stretch; } .nav-links { justify-content: center; } }
+    </style>
+    <title>JobLink - Smart Job Platform</title>
+</head>
+<body>
+    <div id="app"></div>
+</body>
+</html>
