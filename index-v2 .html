@@ -1,1 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JobLink v2</title>
 
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/js/all.min.js"></script>
+
+<style>
+body { margin:0; font-family:Inter; background:#0b0f19; color:white; }
+nav { display:flex; justify-content:space-between; padding:12px 16px; background:#111827; position:sticky; top:0; }
+.container { max-width:900px; margin:auto; padding:12px; }
+
+.card { background:#111827; padding:12px; border-radius:12px; margin-bottom:12px; border:1px solid #1f2937; }
+
+input, button, select {
+  width:100%; padding:10px; margin-top:8px;
+  border-radius:10px; border:1px solid #374151;
+  background:#0f172a; color:white;
+}
+
+.btn { background:#3b82f6; border:none; cursor:pointer; }
+.small { font-size:12px; color:#94a3b8; }
+
+.navbar { display:flex; gap:10px; }
+.navbar button { width:auto; padding:8px 10px; }
+
+.hidden { display:none; }
+
+.bottom { position:fixed; bottom:0; left:0; right:0; background:#111827; display:flex; justify-content:space-around; padding:10px; }
+.bottom button { width:auto; background:none; border:none; color:white; }
+
+.post { padding:10px; border-bottom:1px solid #1f2937; }
+
+</style>
+</head>
+
+<body>
+
+<nav>
+<div><b>JobLink v2</b></div>
+<div class="navbar">
+<button onclick="logout()">Logout</button>
+</div>
+</nav>
+
+<div class="container">
+
+<!-- AUTH -->
+<div id="authBox" class="card">
+<h3>Login / Signup</h3>
+<input id="email" placeholder="email">
+<input id="pass" type="password" placeholder="password">
+<button class="btn" onclick="login()">Login</button>
+<button class="btn" onclick="signup()">Signup</button>
+</div>
+
+<!-- FEED -->
+<div id="feedPage" class="hidden"></div>
+
+<!-- JOBS -->
+<div id="jobPage" class="hidden"></div>
+
+<!-- CHAT -->
+<div id="chatPage" class="hidden"></div>
+
+</div>
+
+<div class="bottom">
+<button onclick="openTab('feed')"><i class="fa fa-home"></i></button>
+<button onclick="openTab('jobs')"><i class="fa fa-briefcase"></i></button>
+<button onclick="openTab('chat')"><i class="fa fa-comment"></i></button>
+</div>
+
+<script type="module">
+
+import {
+initializeApp
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+
+import {
+getAuth, createUserWithEmailAndPassword,
+signInWithEmailAndPassword, signOut,
+onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+
+import {
+getFirestore, collection, addDoc,
+query, orderBy, limit, getDocs,
+startAfter, where, doc, getDoc,
+onSnapshot, updateDoc, Timestamp
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+const firebaseConfig = {
+apiKey: "YOUR_KEY",
+authDomain: "YOUR_DOMAIN",
+projectId: "YOUR_PROJECT"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+// STATE
+let user = null;
+let lastPost = null;
+let loading = false;
+
+/* ---------------- AUTH ---------------- */
+
+window.signup = async () => {
+await createUserWithEmailAndPassword(auth,
+email.value, pass.value);
+};
+
+window.login = async () => {
+await signInWithEmailAndPassword(auth,
+email.value, pass.value);
+};
+
+window.logout = async () => {
+await signOut(auth);
+};
+
+onAuthStateChanged(auth, async (u) => {
+user = u;
+if (!u) {
+document.getElementById("authBox").style.display = "block";
+return;
+}
+document.getElementById("authBox").style.display = "none";
+loadFeed();
+});
+
+/* ---------------- NAV ---------------- */
+
+window.openTab = (tab) => {
+document.getElementById("feedPage").classList.add("hidden");
+document.getElementById("jobPage").classList.add("hidden");
+document.getElementById("chatPage").classList.add("hidden");
+
+if (tab === "feed") loadFeed();
+if (tab === "jobs") loadJobs();
+if (tab === "chat") loadChat();
+};
+
+/* ---------------- FEED (PAGINATED) ---------------- */
+
+async function loadFeed() {
+const el = document.getElementById("feedPage");
+el.classList.remove("hidden");
+
+if (loading) return;
+loading = true;
+
+let q = query(
+collection(db, "posts"),
+orderBy("time", "desc"),
+limit(5)
+);
+
+if (lastPost) {
+q = query(
+collection(db, "posts"),
+orderBy("time", "desc"),
+startAfter(lastPost),
+limit(5)
+);
+}
+
+const snap = await getDocs(q);
+lastPost = snap.docs[snap.docs.length - 1];
+
+snap.forEach(docu => {
+const d = docu.data();
+
+const div = document.createElement("div");
+div.className = "card";
+div.innerHTML = `
+<b>${d.name || "User"}</b>
+<p>${d.text}</p>
+<p class="small">${d.time?.toDate?.().toLocaleString()}</p>
+`;
+el.appendChild(div);
+});
+
+loading = false;
+}
+
+/* ---------------- JOBS (OPTIMIZED) ---------------- */
+
+async function loadJobs() {
+const el = document.getElementById("jobPage");
+el.classList.remove("hidden");
+el.innerHTML = "<div class='card'>Loading jobs...</div>";
+
+const q = query(
+collection(db, "jobs"),
+orderBy("time", "desc"),
+limit(10)
+);
+
+const snap = await getDocs(q);
+
+el.innerHTML = "";
+
+snap.forEach(j => {
+const job = j.data();
+
+const div = document.createElement("div");
+div.className = "card";
+div.innerHTML = `
+<h3>${job.title}</h3>
+<p>${job.company}</p>
+<button onclick="applyJob('${j.id}')">Apply</button>
+`;
+el.appendChild(div);
+});
+}
+
+window.applyJob = async (id) => {
+await addDoc(collection(db, "applications"), {
+jobId: id,
+userId: user.uid,
+time: Timestamp.now()
+});
+alert("Applied!");
+};
+
+/* ---------------- CHAT (ROOM STYLE) ---------------- */
+
+async function loadChat() {
+const el = document.getElementById("chatPage");
+el.classList.remove("hidden");
+el.innerHTML = "<div class='card'>Chat system loading...</div>";
+
+const q = query(
+collection(db, "chats"),
+where("users", "array-contains", user.uid),
+orderBy("updated", "desc")
+);
+
+const snap = await getDocs(q);
+
+el.innerHTML = "";
+
+snap.forEach(c => {
+const chat = c.data();
+
+const div = document.createElement("div");
+div.className = "card";
+div.innerHTML = `
+<b>Chat Room</b>
+<p class="small">${chat.lastMessage || "No messages"}</p>
+`;
+el.appendChild(div);
+});
+}
+
+</script>
+
+</body>
+</html>
