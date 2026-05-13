@@ -1,1 +1,866 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>JobLink – Professional Network</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --primary-light: #3b82f6;
+            --gradient: linear-gradient(135deg, #2563eb, #7c3aed);
+            --gradient-glow: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            --dark: #0f172a;
+            --darker: #020617;
+            --gray: #64748b;
+            --gray-light: #94a3b8;
+            --light: #f8fafc;
+            --white: #ffffff;
+            --border: #e2e8f0;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --card-shadow: 0 20px 35px -12px rgba(0,0,0,0.08);
+            --glow: 0 0 30px rgba(37,99,235,0.3);
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--light);
+            color: var(--dark);
+            line-height: 1.5;
+            padding-bottom: 80px;
+        }
+
+        /* Premium Navbar */
+        .navbar {
+            background: rgba(255,255,255,0.98);
+            backdrop-filter: blur(10px);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .logo {
+            font-size: 1.6rem;
+            font-weight: 800;
+            background: var(--gradient);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .logo i {
+            background: none;
+            color: var(--primary);
+        }
+
+        /* Premium Bottom Navigation */
+        .bottom-nav {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: calc(100% - 40px);
+            max-width: 500px;
+            background: rgba(255,255,255,0.98);
+            backdrop-filter: blur(20px);
+            display: flex;
+            justify-content: space-around;
+            padding: 10px 20px;
+            border-radius: 60px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            z-index: 100;
+        }
+
+        .bottom-nav button {
+            background: none;
+            border: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--gray);
+            cursor: pointer;
+            padding: 8px 16px;
+            border-radius: 40px;
+            transition: var(--transition);
+        }
+
+        .bottom-nav button i { font-size: 20px; }
+
+        .bottom-nav button.active {
+            background: var(--gradient);
+            color: white;
+            box-shadow: var(--glow);
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 1rem;
+            padding-bottom: 80px;
+        }
+
+        /* Premium Cards */
+        .card {
+            background: var(--white);
+            border-radius: 1.5rem;
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+            transition: var(--transition);
+            border: 1px solid var(--border);
+            box-shadow: var(--card-shadow);
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 25px 40px -12px rgba(0,0,0,0.15);
+        }
+
+        /* Job Card Styles */
+        .job-header {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .company-logo {
+            width: 56px;
+            height: 56px;
+            background: var(--gradient);
+            border-radius: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            color: white;
+            flex-shrink: 0;
+        }
+
+        .job-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+        }
+
+        .company-name {
+            font-size: 0.85rem;
+            color: var(--primary);
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+        }
+
+        .job-details {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            font-size: 0.75rem;
+            color: var(--gray);
+            margin: 0.5rem 0;
+        }
+
+        .job-actions {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+
+        .job-actions button {
+            flex: 1;
+            padding: 0.6rem;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .save-btn {
+            background: var(--light);
+            border: 1px solid var(--border);
+            color: var(--gray);
+        }
+
+        .save-btn:hover {
+            background: var(--border);
+        }
+
+        .view-btn {
+            background: var(--light);
+            border: 1px solid var(--border);
+            color: var(--dark);
+        }
+
+        .view-btn:hover {
+            background: var(--border);
+        }
+
+        .apply-btn {
+            background: var(--gradient);
+            border: none;
+            color: white;
+            box-shadow: 0 4px 12px rgba(37,99,235,0.3);
+        }
+
+        .apply-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(37,99,235,0.4);
+        }
+
+        /* Auth Screen Premium */
+        .auth-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 1.5rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .auth-card {
+            background: var(--white);
+            border-radius: 2rem;
+            max-width: 460px;
+            width: 100%;
+            padding: 2.5rem;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+        }
+
+        .auth-logo {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .auth-logo-icon {
+            width: 70px;
+            height: 70px;
+            background: var(--gradient);
+            border-radius: 1.5rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            box-shadow: var(--glow);
+        }
+
+        .auth-title {
+            font-size: 1.8rem;
+            font-weight: 800;
+            background: var(--gradient);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            margin-bottom: 0.25rem;
+        }
+
+        .auth-subtitle {
+            color: var(--gray);
+            font-size: 0.9rem;
+        }
+
+        .auth-tabs {
+            display: flex;
+            gap: 1rem;
+            background: var(--light);
+            border-radius: 1rem;
+            padding: 0.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .auth-tab {
+            flex: 1;
+            padding: 0.8rem;
+            font-size: 1rem;
+            font-weight: 600;
+            border: none;
+            border-radius: 0.75rem;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .auth-tab.active {
+            background: var(--gradient);
+            color: white;
+            box-shadow: var(--glow);
+        }
+
+        .auth-tab.inactive {
+            background: transparent;
+            color: var(--gray);
+        }
+
+        .input-group {
+            margin-bottom: 1.25rem;
+        }
+
+        .input-label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            color: var(--dark);
+        }
+
+        .input-field {
+            width: 100%;
+            padding: 0.9rem 1rem;
+            border: 1.5px solid var(--border);
+            border-radius: 0.75rem;
+            font-size: 0.95rem;
+            transition: var(--transition);
+            background: var(--white);
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+        }
+
+        select.input-field {
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 1rem center;
+            background-size: 1rem;
+        }
+
+        .btn-primary {
+            background: var(--gradient);
+            color: white;
+            border: none;
+            padding: 0.9rem;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            width: 100%;
+            transition: var(--transition);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--glow);
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 90px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--dark);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 2rem;
+            z-index: 2000;
+            font-size: 0.85rem;
+            font-weight: 500;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            animation: slideUp 0.3s ease;
+        }
+
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            display: none;
+        }
+
+        .modal.active {
+            display: flex;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .modal-content {
+            background: var(--white);
+            border-radius: 1.5rem;
+            padding: 1.5rem;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .loader {
+            width: 50px;
+            height: 50px;
+            border: 3px solid var(--border);
+            border-top: 3px solid var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 2rem auto;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+
+        @media (max-width: 640px) {
+            .container { padding: 0.75rem; }
+            .bottom-nav { padding: 8px 16px; }
+            .bottom-nav button { padding: 6px 12px; }
+            .job-actions button { font-size: 0.7rem; padding: 0.5rem; }
+        }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, query, where, orderBy, limit, Timestamp, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDiZsP0tcprL1xIhu-sCkGP-4Mfv_Rw9dg",
+            authDomain: "joblink-d3d17.firebaseapp.com",
+            projectId: "joblink-d3d17",
+            storageBucket: "joblink-d3d17.appspot.com",
+            messagingSenderId: "462684482263",
+            appId: "1:462684482263:web:981dcbe334850ca3fe5e92",
+            measurementId: "G-WHHYBSKV93"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        const usersCol = collection(db, "users");
+        const jobsCol = collection(db, "jobs");
+        const applicationsCol = collection(db, "applications");
+        const savedJobsCol = collection(db, "savedJobs");
+
+        let currentUser = null;
+        let savedJobsSet = new Set();
+
+        function showToast(msg) {
+            const existing = document.querySelector('.toast');
+            if (existing) existing.remove();
+            const toast = document.createElement("div");
+            toast.className = "toast";
+            toast.innerText = msg;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m] || m));
+        }
+
+        function getTimeAgo(timestamp) {
+            if (!timestamp) return 'Just now';
+            const date = timestamp.toDate();
+            const diff = Math.floor((Date.now() - date) / 60000);
+            if (diff < 1) return 'Just now';
+            if (diff < 60) return `${diff}m ago`;
+            if (diff < 1440) return `${Math.floor(diff / 60)}h ago`;
+            return `${Math.floor(diff / 1440)}d ago`;
+        }
+
+        function navigateTo(view) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            const targetView = document.getElementById(`${view}View`);
+            if (targetView) targetView.classList.add('active');
+            document.querySelectorAll('.bottom-nav button').forEach(btn => {
+                if (btn.dataset.nav === view) btn.classList.add('active');
+                else btn.classList.remove('active');
+            });
+            if (view === 'jobs') loadJobs();
+            if (view === 'profile') loadProfile();
+        }
+
+        // Auth Screen
+        function renderAuthScreen() {
+            document.getElementById("app").innerHTML = `
+                <div class="auth-container">
+                    <div class="auth-card">
+                        <div class="auth-logo">
+                            <div class="auth-logo-icon"><i class="fas fa-briefcase"></i></div>
+                            <div class="auth-title">JobLink</div>
+                            <div class="auth-subtitle">Africa's Professional Network</div>
+                        </div>
+                        <div class="auth-tabs">
+                            <button class="auth-tab active" id="loginTab">Sign In</button>
+                            <button class="auth-tab inactive" id="signupTab">Create Account</button>
+                        </div>
+                        <div id="loginPanel">
+                            <div class="input-group">
+                                <label class="input-label">Email Address</label>
+                                <input type="email" id="loginEmail" class="input-field" placeholder="you@example.com">
+                            </div>
+                            <div class="input-group">
+                                <label class="input-label">Password</label>
+                                <input type="password" id="loginPassword" class="input-field" placeholder="••••••••">
+                            </div>
+                            <button id="doLogin" class="btn-primary">Sign In →</button>
+                        </div>
+                        <div id="signupPanel" style="display:none;">
+                            <div class="input-group">
+                                <label class="input-label">Full Name</label>
+                                <input type="text" id="signupName" class="input-field" placeholder="John Doe">
+                            </div>
+                            <div class="input-group">
+                                <label class="input-label">Email Address</label>
+                                <input type="email" id="signupEmail" class="input-field" placeholder="you@example.com">
+                            </div>
+                            <div class="input-group">
+                                <label class="input-label">Password</label>
+                                <input type="password" id="signupPassword" class="input-field" placeholder="Create a password">
+                            </div>
+                            <div class="input-group">
+                                <label class="input-label">I am a</label>
+                                <select id="signupRole" class="input-field">
+                                    <option value="Job Seeker">Job Seeker</option>
+                                    <option value="Employer">Employer</option>
+                                </select>
+                            </div>
+                            <button id="doSignup" class="btn-primary">Get Started →</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            const loginPanel = document.getElementById("loginPanel");
+            const signupPanel = document.getElementById("signupPanel");
+            const loginTab = document.getElementById("loginTab");
+            const signupTab = document.getElementById("signupTab");
+
+            loginTab.onclick = () => {
+                loginPanel.style.display = "block";
+                signupPanel.style.display = "none";
+                loginTab.className = "auth-tab active";
+                signupTab.className = "auth-tab inactive";
+            };
+
+            signupTab.onclick = () => {
+                loginPanel.style.display = "none";
+                signupPanel.style.display = "block";
+                signupTab.className = "auth-tab active";
+                loginTab.className = "auth-tab inactive";
+            };
+
+            document.getElementById("doLogin").onclick = async () => {
+                try {
+                    await signInWithEmailAndPassword(auth, document.getElementById("loginEmail").value, document.getElementById("loginPassword").value);
+                    showToast("Welcome back! 👋");
+                } catch(e) { showToast(e.message); }
+            };
+
+            document.getElementById("doSignup").onclick = async () => {
+                const name = document.getElementById("signupName").value;
+                const email = document.getElementById("signupEmail").value;
+                const pwd = document.getElementById("signupPassword").value;
+                const role = document.getElementById("signupRole").value;
+                if (!name || !email || !pwd) return showToast("All fields required");
+                try {
+                    const cred = await createUserWithEmailAndPassword(auth, email, pwd);
+                    await setDoc(doc(usersCol, cred.user.uid), {
+                        name, email, role,
+                        createdAt: Timestamp.now(),
+                        bio: "",
+                        title: "",
+                        avatarUrl: ""
+                    });
+                    showToast("Account created! 🎉");
+                } catch(e) { showToast(e.message); }
+            };
+        }
+
+        // Load saved jobs
+        async function loadSavedJobsSet() {
+            const q = query(savedJobsCol, where("userId", "==", currentUser?.uid));
+            const snap = await getDocs(q);
+            savedJobsSet.clear();
+            snap.forEach(d => savedJobsSet.add(d.data().jobId));
+        }
+
+        async function toggleSaveJob(jobId) {
+            const ref = doc(savedJobsCol, `${currentUser.uid}_${jobId}`);
+            if (savedJobsSet.has(jobId)) {
+                await deleteDoc(ref);
+                savedJobsSet.delete(jobId);
+                showToast("Removed from saved jobs");
+            } else {
+                await setDoc(ref, { userId: currentUser.uid, jobId, savedAt: Timestamp.now() });
+                savedJobsSet.add(jobId);
+                showToast("Job saved!");
+            }
+            loadJobs();
+        }
+
+        // Load jobs
+        async function loadJobs() {
+            await loadSavedJobsSet();
+            const container = document.getElementById("jobsContainer");
+            if (!container) return;
+
+            container.innerHTML = `<div class="loader"></div>`;
+
+            let jobs = [];
+            try {
+                const snap = await getDocs(query(jobsCol, orderBy("timestamp", "desc"), limit(50)));
+                jobs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            } catch(e) { console.warn(e); }
+
+            if (jobs.length === 0) {
+                jobs = [
+                    { id: "1", title: "Sales Girl", employerName: "Ejim", location: "Enugu, Nigeria", salary: "₦60,000", description: "Looking for a dedicated sales girl", timestamp: Timestamp.now() },
+                    { id: "2", title: "Nanny", employerName: "Ejim", location: "Amechi, Enugu", salary: "₦100,000", description: "Experienced nanny needed", timestamp: Timestamp.now() }
+                ];
+            }
+
+            container.innerHTML = jobs.map(job => `
+                <div class="card">
+                    <div class="job-header">
+                        <div class="company-logo"><i class="fas fa-building"></i></div>
+                        <div style="flex:1">
+                            <div class="job-title">${escapeHtml(job.title)}</div>
+                            <div class="company-name">${escapeHtml(job.employerName)}</div>
+                            <div class="job-details">
+                                <span><i class="fas fa-map-marker-alt"></i> ${escapeHtml(job.location)}</span>
+                                <span><i class="fas fa-money-bill-wave"></i> ${escapeHtml(job.salary)}</span>
+                                <span><i class="fas fa-clock"></i> ${getTimeAgo(job.timestamp)}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="job-actions">
+                        <button class="save-btn" data-id="${job.id}"><i class="fas fa-bookmark"></i> ${savedJobsSet.has(job.id) ? 'Saved' : 'Save'}</button>
+                        <button class="view-btn" data-id="${job.id}">Details</button>
+                        <button class="apply-btn" data-id="${job.id}">Apply Now</button>
+                    </div>
+                </div>
+            `).join('');
+
+            // Save button
+            document.querySelectorAll('.save-btn').forEach(btn => {
+                btn.onclick = () => toggleSaveJob(btn.dataset.id);
+            });
+
+            // View Details
+            document.querySelectorAll('.view-btn').forEach(btn => {
+                btn.onclick = async () => {
+                    const job = jobs.find(j => j.id === btn.dataset.id);
+                    const modal = document.createElement("div");
+                    modal.className = "modal active";
+                    modal.innerHTML = `
+                        <div class="modal-content">
+                            <h2 style="margin-bottom:0.5rem;">${escapeHtml(job.title)}</h2>
+                            <p style="color:var(--primary); font-weight:600; margin-bottom:1rem;">${escapeHtml(job.employerName)}</p>
+                            <div style="margin-bottom:1rem; padding-bottom:1rem; border-bottom:1px solid var(--border);">
+                                <p><i class="fas fa-map-marker-alt"></i> ${escapeHtml(job.location)}</p>
+                                <p><i class="fas fa-money-bill-wave"></i> ${escapeHtml(job.salary)}</p>
+                                <p><i class="fas fa-clock"></i> Posted ${getTimeAgo(job.timestamp)}</p>
+                            </div>
+                            <p style="margin-bottom:1rem;"><strong>Description</strong><br/>${escapeHtml(job.description)}</p>
+                            <button class="apply-now" data-id="${job.id}" style="background:var(--gradient); width:100%; padding:0.875rem; border-radius:0.75rem; border:none; color:white; font-weight:600; cursor:pointer;">Apply Now</button>
+                            <button class="close-modal" style="margin-top:0.75rem; background:transparent; border:1px solid var(--border); width:100%; padding:0.875rem; border-radius:0.75rem; cursor:pointer;">Close</button>
+                        </div>
+                    `;
+                    document.body.appendChild(modal);
+                    modal.querySelector(".apply-now")?.addEventListener("click", async () => {
+                        await applyForJob(job.id);
+                        modal.remove();
+                    });
+                    modal.querySelector(".close-modal")?.addEventListener("click", () => modal.remove());
+                };
+            });
+
+            // Apply button
+            document.querySelectorAll('.apply-btn').forEach(btn => {
+                btn.onclick = () => applyForJob(btn.dataset.id);
+            });
+        }
+
+        async function applyForJob(jobId) {
+            const existing = await getDocs(query(applicationsCol, where("jobId", "==", jobId), where("applicantId", "==", currentUser.uid)));
+            if (!existing.empty) return showToast("You already applied for this job");
+            await addDoc(applicationsCol, { jobId, applicantId: currentUser.uid, status: 'applied', appliedAt: Timestamp.now() });
+            showToast("Application submitted! 🎉");
+        }
+
+        // Profile
+        async function loadProfile() {
+            const container = document.getElementById("profileContainer");
+            if (!container) return;
+
+            container.innerHTML = `<div class="loader"></div>`;
+
+            try {
+                const userDoc = await getDoc(doc(usersCol, currentUser.uid));
+                const user = userDoc.data();
+
+                const appsSnap = await getDocs(query(applicationsCol, where("applicantId", "==", currentUser.uid)));
+                const applications = [];
+                for (const app of appsSnap.docs) {
+                    const jobDoc = await getDoc(doc(jobsCol, app.data().jobId));
+                    if (jobDoc.exists()) applications.push({ ...app.data(), job: jobDoc.data() });
+                }
+
+                container.innerHTML = `
+                    <div class="card" style="text-align:center;">
+                        <div style="width:80px; height:80px; background:var(--gradient); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:2rem; margin:0 auto 1rem;">${escapeHtml(user.name?.charAt(0) || 'U')}</div>
+                        <h2 style="font-size:1.3rem;">${escapeHtml(user.name)}</h2>
+                        <p style="color:var(--gray); margin-bottom:0.5rem;">${escapeHtml(user.title || 'Professional')}</p>
+                        <p style="margin-bottom:1rem;">${escapeHtml(user.bio || 'No bio yet. Click edit to add your professional summary.')}</p>
+                        <button id="editProfileBtn" style="background:transparent; border:1px solid var(--border); padding:0.7rem; border-radius:0.75rem; cursor:pointer; width:100%;">✎ Edit Profile</button>
+                    </div>
+                    <div class="card">
+                        <h3 style="margin-bottom:1rem;"><i class="fas fa-briefcase"></i> My Applications (${applications.length})</h3>
+                        ${applications.length ? applications.map(app => `
+                            <div style="padding:0.75rem 0; border-bottom:1px solid var(--border);">
+                                <div style="font-weight:600;">${escapeHtml(app.job.title)}</div>
+                                <div style="font-size:0.75rem; color:var(--gray);">${escapeHtml(app.job.employerName)}</div>
+                                <div style="margin-top:0.25rem;"><span style="background:var(--success); color:white; padding:0.2rem 0.6rem; border-radius:1rem; font-size:0.7rem;">${app.status}</span></div>
+                            </div>
+                        `).join('') : '<p style="color:var(--gray); text-align:center; padding:1rem;">No applications yet. Start applying to jobs!</p>'}
+                    </div>
+                `;
+
+                document.getElementById("editProfileBtn")?.addEventListener("click", () => {
+                    const bio = prompt("Enter your bio:", user.bio || "");
+                    const title = prompt("Enter your title:", user.title || "");
+                    if (bio !== null) updateDoc(doc(usersCol, currentUser.uid), { bio });
+                    if (title !== null) updateDoc(doc(usersCol, currentUser.uid), { title });
+                    if (bio !== null || title !== null) {
+                        showToast("Profile updated!");
+                        loadProfile();
+                    }
+                });
+            } catch(e) {
+                container.innerHTML = `<div class="card">Failed to load profile</div>`;
+            }
+        }
+
+        // Create Post Modal
+        function showCreatePostModal() {
+            const modal = document.createElement("div");
+            modal.className = "modal active";
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <h3 style="margin-bottom:1rem;">Create Post</h3>
+                    <textarea id="postContent" placeholder="What's on your mind? Share updates, celebrate wins..." rows="5" style="width:100%; padding:0.875rem; border-radius:0.75rem; border:1px solid var(--border); margin-bottom:1rem;"></textarea>
+                    <button id="submitPost" class="btn-primary">Post</button>
+                    <button class="close-modal" style="margin-top:0.75rem; background:transparent; border:1px solid var(--border); width:100%; padding:0.875rem; border-radius:0.75rem; cursor:pointer;">Cancel</button>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            modal.querySelector("#submitPost")?.addEventListener("click", async () => {
+                const content = modal.querySelector("#postContent").value;
+                if (content.trim()) {
+                    await addDoc(postsCol, {
+                        content,
+                        authorId: currentUser.uid,
+                        authorName: currentUserData?.name,
+                        timestamp: Timestamp.now(),
+                        likes: 0,
+                        comments: 0
+                    });
+                    showToast("Post created! 🎉");
+                    modal.remove();
+                } else {
+                    showToast("Please write something first");
+                }
+            });
+            modal.querySelector(".close-modal")?.addEventListener("click", () => modal.remove());
+        }
+
+        // Main App
+        async function renderMainApp() {
+            document.getElementById("app").innerHTML = `
+                <nav class="navbar">
+                    <div class="logo"><i class="fas fa-briefcase"></i> JobLink</div>
+                    <div style="display:flex; gap:0.5rem;">
+                        <button class="logout-btn" style="background:var(--danger); border:none; padding:0.5rem 1rem; border-radius:0.75rem; color:white; cursor:pointer; font-weight:500;">Logout</button>
+                    </div>
+                </nav>
+                <div class="bottom-nav">
+                    <button data-nav="jobs" class="active"><i class="fas fa-briefcase"></i><span>Jobs</span></button>
+                    <button data-nav="profile"><i class="fas fa-user"></i><span>Profile</span></button>
+                </div>
+                <div class="container">
+                    <div id="jobsView" class="view active"><div id="jobsContainer"></div></div>
+                    <div id="profileView" class="view"><div id="profileContainer"></div></div>
+                </div>
+            `;
+
+            document.querySelectorAll('.bottom-nav button').forEach(btn => {
+                btn.onclick = () => navigateTo(btn.dataset.nav);
+            });
+            document.querySelector(".logout-btn")?.addEventListener("click", () => signOut(auth));
+
+            await loadJobs();
+            await loadProfile();
+        }
+
+        function renderDashboard() {
+            if (!currentUser) return renderAuthScreen();
+            renderMainApp();
+        }
+
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                currentUser = user;
+                const docRef = doc(usersCol, user.uid);
+                const docSnap = await getDoc(docRef);
+                if (!docSnap.exists()) {
+                    await setDoc(docRef, {
+                        name: user.email.split('@')[0],
+                        email: user.email,
+                        role: "Job Seeker",
+                        createdAt: Timestamp.now(),
+                        bio: "",
+                        title: ""
+                    });
+                }
+                renderDashboard();
+            } else {
+                currentUser = null;
+                renderAuthScreen();
+            }
+        });
+    </script>
+</body>
+</html>
