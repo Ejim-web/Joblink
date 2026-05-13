@@ -1,1 +1,144 @@
+import { auth, db } from "./firebase-config.js";
+import { initAuth, getCurrentUser, getCurrentUserData, renderAuthScreen } from "./auth.js";
+import { renderFeed, createPost, cleanupFeed } from "./feed.js";
+import { renderJobs, showPostJobModal } from "./jobs.js";
+import { renderChat } from "./chat.js";
+import { renderNotifications } from "./notifications.js";
+import { renderAdmin } from "./admin.js";
+import { showToast } from "./utils.js";
 
+let currentView = "feed";
+
+function navigateTo(view) {
+    currentView = view;
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById(`${view}View`).classList.add('active');
+    document.querySelectorAll('.bottom-nav button').forEach(btn => {
+        if (btn.dataset.nav === view) btn.classList.add('active');
+        else btn.classList.remove('active');
+    });
+    // Render content
+    if (view === 'feed') {
+        const feedContainer = document.getElementById("feedContainer");
+        if (feedContainer) renderFeed(feedContainer);
+    } else if (view === 'jobs') {
+        const jobsContainer = document.getElementById("jobsContainer");
+        if (jobsContainer) renderJobs(jobsContainer);
+    } else if (view === 'network') {
+        // Network component would go here (optional)
+    } else if (view === 'messages') {
+        const chatsContainer = document.getElementById("chatsContainer");
+        const chatAreaView = document.getElementById("chatAreaView");
+        if (chatsContainer && chatAreaView) renderChat(chatsContainer, chatAreaView);
+    } else if (view === 'profile') {
+        const profileContainer = document.getElementById("profileContainer");
+        if (profileContainer) renderProfile(profileContainer);
+    } else if (view === 'notifications') {
+        const notifContainer = document.getElementById("notificationsContainer");
+        if (notifContainer) renderNotifications(notifContainer);
+    } else if (view === 'admin') {
+        const adminContainer = document.getElementById("adminContainer");
+        if (adminContainer) renderAdmin(adminContainer);
+    }
+}
+
+function renderProfile(container) {
+    const user = getCurrentUserData();
+    if (!user) return;
+    container.innerHTML = `
+        <div class="card">
+            <div style="position:relative;">
+                <div style="height:100px; background:var(--gradient); border-radius:1rem;"></div>
+                <div style="width:80px; height:80px; background:var(--gradient); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:2rem; margin-top:-40px; margin-left:1rem; border:4px solid var(--white);">${escapeHtml(user.name?.charAt(0) || 'U')}</div>
+            </div>
+            <div style="padding:0 1rem 1rem 1rem;">
+                <h2>${escapeHtml(user.name)}</h2>
+                <p style="color:var(--gray);">${escapeHtml(user.title || 'Professional')}</p>
+                <p>${escapeHtml(user.bio || 'No bio yet')}</p>
+                <button id="editProfileBtn" class="btn-primary" style="margin-top:1rem;">Edit Profile</button>
+                <button onclick="window.toggleTheme()" class="btn-primary" style="margin-top:0.5rem;">Dark Mode</button>
+            </div>
+        </div>
+    `;
+    document.getElementById("editProfileBtn")?.addEventListener("click", () => {
+        const bio = prompt("Bio:", user.bio || "");
+        const title = prompt("Title:", user.title || "");
+        if (bio !== null || title !== null) {
+            // Update user in Firestore (simplified, would need updateDoc)
+            showToast("Profile updated (demo)");
+        }
+    });
+}
+
+function renderMainApp() {
+    const app = document.getElementById("app");
+    const user = getCurrentUserData();
+    const isEmployer = user?.role === 'Employer';
+    const isAdmin = user?.role === 'Admin';
+
+    app.innerHTML = `
+        <nav class="navbar">
+            <div class="logo">JobLink</div>
+            <div style="display:flex; gap:0.5rem;">
+                <button id="createPostBtn" style="background:var(--light); border:1px solid var(--border); padding:0.5rem 0.8rem; border-radius:0.75rem;"><i class="fas fa-plus"></i></button>
+                ${isEmployer ? '<button id="postJobBtn" style="background:var(--gradient); border:none; padding:0.5rem 1rem; border-radius:0.75rem; color:white;">Post Job</button>' : ''}
+                <button class="logout-btn" style="background:var(--danger); border:none; padding:0.5rem 1rem; border-radius:0.75rem; color:white;">Logout</button>
+            </div>
+        </nav>
+        <div class="bottom-nav">
+            <button data-nav="feed" class="active"><i class="fas fa-home"></i><span>Feed</span></button>
+            <button data-nav="jobs"><i class="fas fa-briefcase"></i><span>Jobs</span></button>
+            <button data-nav="messages"><i class="fas fa-comment"></i><span>Chat</span></button>
+            <button data-nav="profile"><i class="fas fa-user"></i><span>Profile</span></button>
+            <button data-nav="notifications"><i class="fas fa-bell"></i><span>Alerts</span></button>
+            ${isAdmin ? '<button data-nav="admin"><i class="fas fa-shield-alt"></i><span>Admin</span></button>' : ''}
+        </div>
+        <div class="container">
+            <div id="feedView" class="view active"><div id="feedContainer"></div></div>
+            <div id="jobsView" class="view">
+                <div class="search-bar"><input type="text" id="jobSearchInput" class="search-input" placeholder="🔍 Search jobs..."></div>
+                <div class="filters" style="display:flex; gap:0.5rem; margin-bottom:1rem;">
+                    <span class="filter-chip" data-filter="all" style="padding:0.3rem 1rem; background:var(--gradient); color:white; border-radius:2rem; cursor:pointer;">All</span>
+                    <span class="filter-chip" data-filter="remote" style="padding:0.3rem 1rem; background:var(--light); border:1px solid var(--border); border-radius:2rem; cursor:pointer;">Remote</span>
+                </div>
+                <div id="jobsContainer"></div>
+            </div>
+            <div id="messagesView" class="view"><div id="chatsContainer"></div><div id="chatAreaView"></div></div>
+            <div id="profileView" class="view"><div id="profileContainer"></div></div>
+            <div id="notificationsView" class="view"><div id="notificationsContainer"></div></div>
+            ${isAdmin ? '<div id="adminView" class="view"><div id="adminContainer"></div></div>' : ''}
+        </div>
+    `;
+
+    // Navigation
+    document.querySelectorAll('.bottom-nav button').forEach(btn => {
+        btn.onclick = () => navigateTo(btn.dataset.nav);
+    });
+    document.querySelector(".logout-btn").onclick = () => {
+        import("./auth.js").then(module => module.logout());
+    };
+    document.getElementById("createPostBtn").onclick = () => {
+        const content = prompt("What's on your mind?");
+        if (content) createPost(content, null);
+    };
+    if (isEmployer) {
+        document.getElementById("postJobBtn").onclick = () => showPostJobModal();
+    }
+
+    // Initial render
+    navigateTo("feed");
+}
+
+// Initialize app
+function init() {
+    initAuth(() => {
+        const user = getCurrentUser();
+        if (!user) {
+            renderAuthScreen(document.getElementById("app"));
+        } else {
+            renderMainApp();
+        }
+    });
+}
+
+init();
