@@ -1,9 +1,296 @@
 <!DOCTYPE html>
-<html>
-<head><title>JobLink Test</title></head>
-<body style="background:#0f172a; color:white; text-align:center; padding:50px;">
-    <h1>✅ JobLink is working!</h1>
-    <p>If you see this, GitHub Pages is configured correctly.</p>
-    <p>Now replace this file with the real JobLink code.</p>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>JobLink – Professional Network</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-card: #1c1c24;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0b0;
+            --border: rgba(255,255,255,0.08);
+            --accent: #3b82f6;
+            --accent-gradient: linear-gradient(135deg, #3b82f6, #6366f1);
+            --success: #10b981;
+            --danger: #ef4444;
+        }
+        body.light {
+            --bg-primary: #f8fafc;
+            --bg-card: #ffffff;
+            --text-primary: #0f172a;
+            --text-secondary: #475569;
+            --border: rgba(0,0,0,0.06);
+        }
+        body { font-family: 'Inter', sans-serif; background: var(--bg-primary); color: var(--text-primary); padding-bottom: 70px; }
+        .bottom-nav {
+            position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+            background: var(--bg-card); display: flex; gap: 16px; padding: 8px 20px;
+            border-radius: 2rem; border: 1px solid var(--border); z-index: 100;
+        }
+        .bottom-nav button { background: none; border: none; color: var(--text-secondary); font-size: 14px; padding: 8px 16px; border-radius: 2rem; cursor: pointer; }
+        .bottom-nav button.active { background: var(--accent-gradient); color: white; }
+        .container { max-width: 800px; margin: 0 auto; padding: 1rem; }
+        .card { background: var(--bg-card); border-radius: 1.25rem; border: 1px solid var(--border); padding: 1.25rem; margin-bottom: 1rem; }
+        .job-header { display: flex; gap: 1rem; margin-bottom: 1rem; }
+        .company-logo { width: 52px; height: 52px; background: var(--accent-gradient); border-radius: 1rem; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; }
+        .job-details { display: flex; flex-wrap: wrap; gap: 0.75rem; font-size: 0.75rem; color: var(--text-secondary); margin: 0.5rem 0; }
+        .btn-primary { background: var(--accent-gradient); color: white; border: none; padding: 0.75rem; border-radius: 0.75rem; width: 100%; cursor: pointer; }
+        .job-actions { display: flex; gap: 0.75rem; margin-top: 1rem; }
+        .job-actions button { flex: 1; padding: 0.6rem; border-radius: 0.75rem; font-weight: 500; cursor: pointer; }
+        .save-btn { background: var(--bg-primary); border: 1px solid var(--border); color: var(--text-primary); }
+        .view-btn { background: var(--bg-primary); border: 1px solid var(--border); color: var(--text-primary); }
+        .apply-btn { background: var(--accent-gradient); border: none; color: white; }
+        .toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: var(--accent-gradient); color: white; padding: 0.75rem 1.5rem; border-radius: 2rem; z-index: 2000; }
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; z-index: 1000; display: none; }
+        .modal.active { display: flex; }
+        .modal-content { background: var(--bg-card); border-radius: 1.5rem; padding: 1.5rem; max-width: 500px; width: 90%; }
+        .loader { width: 40px; height: 40px; border: 3px solid var(--border); border-top: 3px solid var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin: 2rem auto; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @media (max-width: 640px) { .job-actions button { font-size: 0.7rem; } }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, getDoc, getDocs, query, where, orderBy, Timestamp, addDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDiZsP0tcprL1xIhu-sCkGP-4Mfv_Rw9dg",
+            authDomain: "joblink-d3d17.firebaseapp.com",
+            projectId: "joblink-d3d17",
+            storageBucket: "joblink-d3d17.appspot.com",
+            messagingSenderId: "462684482263",
+            appId: "1:462684482263:web:981dcbe334850ca3fe5e92",
+            measurementId: "G-WHHYBSKV93"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        const usersCol = collection(db, "users");
+        const jobsCol = collection(db, "jobs");
+        const applicationsCol = collection(db, "applications");
+        const savedJobsCol = collection(db, "savedJobs");
+
+        let currentUser = null, savedJobsSet = new Set();
+
+        function showToast(msg) {
+            const t = document.createElement("div"); t.className = "toast"; t.innerText = msg; document.body.appendChild(t);
+            setTimeout(() => t.remove(), 3000);
+        }
+        function escapeHtml(str) { if (!str) return ''; return str.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m] || m)); }
+        function getTimeAgo(ts) { if (!ts) return 'Just now'; const d = ts.toDate(); const diff = Math.floor((Date.now() - d) / 60000); if (diff < 1) return 'Just now'; if (diff < 60) return `${diff}m ago`; if (diff < 1440) return `${Math.floor(diff/60)}h ago`; return `${Math.floor(diff/1440)}d ago`; }
+        
+        function initTheme() { if (localStorage.getItem('theme') === 'light') document.body.classList.add('light'); }
+        window.toggleTheme = () => { document.body.classList.toggle('light'); localStorage.setItem('theme', document.body.classList.contains('light') ? 'light' : 'dark'); };
+        initTheme();
+
+        function navigateTo(view) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.getElementById(`${view}View`).classList.add('active');
+            document.querySelectorAll('.bottom-nav button').forEach(btn => {
+                if (btn.dataset.nav === view) btn.classList.add('active');
+                else btn.classList.remove('active');
+            });
+            if (view === 'jobs') loadJobs();
+            if (view === 'profile') loadProfile();
+        }
+
+        function renderAuthScreen() {
+            document.getElementById("app").innerHTML = `
+                <div style="display:flex; justify-content:center; align-items:center; min-height:100vh; background:var(--bg-primary); padding:1rem;">
+                    <div style="background:var(--bg-card); border-radius:2rem; max-width:400px; width:100%; padding:2rem;">
+                        <div style="text-align:center; margin-bottom:2rem;">
+                            <div style="font-size:2rem; background:var(--accent-gradient); width:70px; height:70px; display:inline-flex; align-items:center; justify-content:center; border-radius:1.5rem; margin-bottom:1rem;">💼</div>
+                            <h1 style="font-size:1.8rem;">JobLink</h1>
+                            <p>Africa's Professional Network</p>
+                        </div>
+                        <div style="display:flex; gap:1rem; margin-bottom:1.5rem;">
+                            <button id="loginTab" style="flex:1; padding:0.7rem; border-radius:0.75rem; background:var(--accent-gradient); color:white; border:none;">Sign In</button>
+                            <button id="signupTab" style="flex:1; padding:0.7rem; border-radius:0.75rem; background:transparent; border:1px solid var(--border); color:var(--text-primary);">Create Account</button>
+                        </div>
+                        <div id="loginPanel">
+                            <input type="email" id="loginEmail" placeholder="Email" style="width:100%; padding:0.7rem; margin-bottom:1rem; border-radius:0.75rem; border:1px solid var(--border); background:var(--bg-primary); color:var(--text-primary);">
+                            <input type="password" id="loginPassword" placeholder="Password" style="width:100%; padding:0.7rem; margin-bottom:1rem; border-radius:0.75rem; border:1px solid var(--border); background:var(--bg-primary); color:var(--text-primary);">
+                            <button id="doLogin" class="btn-primary">Sign In →</button>
+                        </div>
+                        <div id="signupPanel" style="display:none;">
+                            <input type="text" id="signupName" placeholder="Full name" style="width:100%; padding:0.7rem; margin-bottom:1rem; border-radius:0.75rem; border:1px solid var(--border); background:var(--bg-primary); color:var(--text-primary);">
+                            <input type="email" id="signupEmail" placeholder="Email" style="width:100%; padding:0.7rem; margin-bottom:1rem; border-radius:0.75rem; border:1px solid var(--border); background:var(--bg-primary); color:var(--text-primary);">
+                            <input type="password" id="signupPassword" placeholder="Password" style="width:100%; padding:0.7rem; margin-bottom:1rem; border-radius:0.75rem; border:1px solid var(--border); background:var(--bg-primary); color:var(--text-primary);">
+                            <select id="signupRole" style="width:100%; padding:0.7rem; margin-bottom:1rem; border-radius:0.75rem; border:1px solid var(--border); background:var(--bg-primary); color:var(--text-primary);">
+                                <option>Job Seeker</option><option>Employer</option>
+                            </select>
+                            <button id="doSignup" class="btn-primary">Create Account →</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            const loginPanel = document.getElementById("loginPanel"), signupPanel = document.getElementById("signupPanel");
+            const loginTab = document.getElementById("loginTab"), signupTab = document.getElementById("signupTab");
+            loginTab.onclick = () => { loginPanel.style.display = "block"; signupPanel.style.display = "none"; loginTab.style.background = "var(--accent-gradient)"; signupTab.style.background = "transparent"; };
+            signupTab.onclick = () => { loginPanel.style.display = "none"; signupPanel.style.display = "block"; signupTab.style.background = "var(--accent-gradient)"; loginTab.style.background = "transparent"; };
+            document.getElementById("doLogin").onclick = async () => { try { await signInWithEmailAndPassword(auth, document.getElementById("loginEmail").value, document.getElementById("loginPassword").value); } catch(e) { showToast(e.message); } };
+            document.getElementById("doSignup").onclick = async () => {
+                const name = document.getElementById("signupName").value, email = document.getElementById("signupEmail").value, pwd = document.getElementById("signupPassword").value, role = document.getElementById("signupRole").value;
+                if (!name || !email || !pwd) return showToast("All fields required");
+                try {
+                    const cred = await createUserWithEmailAndPassword(auth, email, pwd);
+                    await setDoc(doc(usersCol, cred.user.uid), { name, email, role, createdAt: Timestamp.now(), bio: "", title: "" });
+                    showToast("Account created!");
+                } catch(e) { showToast(e.message); }
+            };
+        }
+
+        async function loadSavedJobsSet() {
+            const snap = await getDocs(query(savedJobsCol, where("userId", "==", currentUser.uid)));
+            savedJobsSet.clear(); snap.forEach(d => savedJobsSet.add(d.data().jobId));
+        }
+        async function toggleSaveJob(jobId) {
+            const ref = doc(savedJobsCol, `${currentUser.uid}_${jobId}`);
+            if (savedJobsSet.has(jobId)) { await deleteDoc(ref); savedJobsSet.delete(jobId); showToast("Removed"); }
+            else { await setDoc(ref, { userId: currentUser.uid, jobId, savedAt: Timestamp.now() }); savedJobsSet.add(jobId); showToast("Job saved!"); }
+            loadJobs();
+        }
+
+        async function loadJobs() {
+            await loadSavedJobsSet();
+            const container = document.getElementById("jobsContainer");
+            if (!container) return;
+            container.innerHTML = `<div class="loader"></div>`;
+            let jobs = [];
+            try {
+                const snap = await getDocs(query(jobsCol, orderBy("timestamp", "desc"), limit(50)));
+                jobs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            } catch(e) { console.warn(e); }
+            if (jobs.length === 0) {
+                jobs = [
+                    { id: "demo1", title: "Sales Girl", employerName: "Ejim", location: "Enugu, Nigeria", salary: "₦60,000", description: "Looking for a dedicated sales girl", timestamp: Timestamp.now() },
+                    { id: "demo2", title: "Nanny", employerName: "Ejim", location: "Amechi, Enugu", salary: "₦100,000 monthly", description: "Experienced nanny needed", timestamp: Timestamp.now() }
+                ];
+            }
+            container.innerHTML = jobs.map(job => `
+                <div class="card">
+                    <div class="job-header">
+                        <div class="company-logo"><i class="fas fa-building"></i></div>
+                        <div style="flex:1">
+                            <h3>${escapeHtml(job.title)}</h3>
+                            <div style="color:var(--accent);">${escapeHtml(job.employerName)}</div>
+                            <div class="job-details">
+                                <span><i class="fas fa-map-marker-alt"></i> ${escapeHtml(job.location)}</span>
+                                <span><i class="fas fa-money-bill-wave"></i> ${escapeHtml(job.salary)}</span>
+                                <span><i class="fas fa-clock"></i> ${getTimeAgo(job.timestamp)}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="job-actions">
+                        <button class="save-btn" data-id="${job.id}"><i class="fas fa-bookmark"></i> ${savedJobsSet.has(job.id) ? 'Saved' : 'Save'}</button>
+                        <button class="view-btn" data-id="${job.id}">Details</button>
+                        <button class="apply-btn" data-id="${job.id}">Apply</button>
+                    </div>
+                </div>
+            `).join('');
+            document.querySelectorAll('.save-btn').forEach(btn => btn.onclick = () => toggleSaveJob(btn.dataset.id));
+            document.querySelectorAll('.view-btn').forEach(btn => btn.onclick = async () => {
+                const job = jobs.find(j => j.id === btn.dataset.id);
+                const modal = document.createElement("div"); modal.className = "modal active";
+                modal.innerHTML = `<div class="modal-content"><h2>${escapeHtml(job.title)}</h2><p>${escapeHtml(job.employerName)}</p><p>📍 ${escapeHtml(job.location)}<br/>💰 ${escapeHtml(job.salary)}</p><p>${escapeHtml(job.description)}</p><button class="apply-now" data-id="${job.id}" class="btn-primary" style="margin-top:1rem;">Apply Now</button><button class="close-modal" style="margin-top:0.5rem; background:transparent; border:1px solid var(--border);">Close</button></div>`;
+                document.body.appendChild(modal);
+                modal.querySelector(".apply-now")?.addEventListener("click", async () => { await applyForJob(job.id); modal.remove(); });
+                modal.querySelector(".close-modal")?.addEventListener("click", () => modal.remove());
+            });
+            document.querySelectorAll('.apply-btn').forEach(btn => btn.onclick = () => applyForJob(btn.dataset.id));
+        }
+        async function applyForJob(jobId) {
+            const existing = await getDocs(query(applicationsCol, where("jobId", "==", jobId), where("applicantId", "==", currentUser.uid)));
+            if (!existing.empty) return showToast("Already applied");
+            await addDoc(applicationsCol, { jobId, applicantId: currentUser.uid, status: 'applied', appliedAt: Timestamp.now() });
+            showToast("Application submitted!");
+        }
+
+        async function loadProfile() {
+            const container = document.getElementById("profileContainer");
+            if (!container) return;
+            container.innerHTML = `<div class="loader"></div>`;
+            try {
+                const userDoc = await getDoc(doc(usersCol, currentUser.uid));
+                const user = userDoc.data();
+                const appsSnap = await getDocs(query(applicationsCol, where("applicantId", "==", currentUser.uid)));
+                let apps = [];
+                for (const a of appsSnap.docs) {
+                    const jobDoc = await getDoc(doc(jobsCol, a.data().jobId));
+                    if (jobDoc.exists()) apps.push({ id: a.id, ...a.data(), job: jobDoc.data() });
+                }
+                container.innerHTML = `
+                    <div class="card" style="text-align:center;">
+                        <div style="width:80px; height:80px; background:var(--accent-gradient); border-radius:50%; margin:0 auto 1rem; display:flex; align-items:center; justify-content:center; font-size:2rem;">${escapeHtml(user.name?.charAt(0) || 'U')}</div>
+                        <h2>${escapeHtml(user.name)}</h2>
+                        <p>${escapeHtml(user.title || 'Professional')}</p>
+                        <p>${escapeHtml(user.bio || 'No bio')}</p>
+                        <button id="editProfileBtn" class="btn-outline" style="margin-top:1rem;">Edit Profile</button>
+                    </div>
+                    <div class="card">
+                        <h3>My Applications (${apps.length})</h3>
+                        ${apps.length ? apps.map(a => `<div style="border-bottom:1px solid var(--border); padding:0.5rem 0;"><strong>${escapeHtml(a.job.title)}</strong><br/>${escapeHtml(a.job.employerName)} • Status: ${escapeHtml(a.status)}</div>`).join('') : '<p>No applications yet.</p>'}
+                    </div>
+                `;
+                document.getElementById("editProfileBtn")?.addEventListener("click", () => {
+                    const bio = prompt("Bio:", user.bio || "");
+                    const title = prompt("Title:", user.title || "");
+                    if (bio !== null) updateDoc(doc(usersCol, currentUser.uid), { bio });
+                    if (title !== null) updateDoc(doc(usersCol, currentUser.uid), { title });
+                    if (bio !== null || title !== null) loadProfile();
+                });
+            } catch(e) { container.innerHTML = `<div class="card">Could not load profile</div>`; }
+        }
+
+        async function renderMainApp() {
+            document.getElementById("app").innerHTML = `
+                <div style="background:var(--bg-card); padding:0.75rem 1rem; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border);">
+                    <div style="font-weight:800;">JobLink</div>
+                    <div style="display:flex; gap:0.5rem;">
+                        <button onclick="window.toggleTheme()" style="background:var(--bg-primary); border:none; padding:0.5rem 0.8rem; border-radius:2rem;">🌓</button>
+                        <button class="logout-btn" style="background:var(--danger); border:none; padding:0.5rem 1rem; border-radius:2rem; color:white;">Logout</button>
+                    </div>
+                </div>
+                <div class="bottom-nav">
+                    <button data-nav="jobs" class="active"><i class="fas fa-briefcase"></i> Jobs</button>
+                    <button data-nav="profile"><i class="fas fa-user"></i> Profile</button>
+                </div>
+                <div class="container">
+                    <div id="jobsView" class="view active"><div id="jobsContainer"></div></div>
+                    <div id="profileView" class="view"><div id="profileContainer"></div></div>
+                </div>
+            `;
+            document.querySelectorAll('.bottom-nav button').forEach(btn => btn.onclick = () => navigateTo(btn.dataset.nav));
+            document.querySelector(".logout-btn")?.addEventListener("click", () => signOut(auth));
+            await loadJobs();
+            await loadProfile();
+        }
+
+        function renderDashboard() {
+            if (!currentUser) return renderAuthScreen();
+            renderMainApp();
+        }
+
+        onAuthStateChanged(auth, async (user) => {
+            if (user) { 
+                currentUser = user;
+                const docRef = doc(usersCol, user.uid);
+                const docSnap = await getDoc(docRef);
+                if (!docSnap.exists()) await setDoc(docRef, { name: user.email.split('@')[0], email: user.email, role: "Job Seeker", createdAt: Timestamp.now(), bio: "", title: "" });
+                renderDashboard();
+            } else { renderAuthScreen(); }
+        });
+    </script>
 </body>
 </html>
