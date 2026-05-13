@@ -1,1 +1,110 @@
+import { db } from "./firebase-config.js";
+import { collection, query, where, orderBy, getDocs, addDoc, updateDoc, doc, onSnapshot, writeBatch, limit, startAfter, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { escapeHtml, getTimeAgo, showToast, getUserData } from "./utils.js";
+import { getCurrentUser, getCurrentUserData } from "./auth.js";
 
+const chatsCol = collection(db, "chats");
+const messagesCol = collection(db, "messages");
+
+let chatsContainer = null;
+let chatAreaView = null;
+let currentChatId = null;
+let messagesUnsubscribe = null;
+
+export async function renderChat(container, chatAreaContainer) {
+    chatsContainer = container;
+    chatAreaView = chatAreaContainer;
+    await loadChats();
+}
+
+export async function loadChats() {
+    if (!chatsContainer) return;
+    chatsContainer.innerHTML = `<div class="loader"></div>`;
+    const snapshot = await getDocs(query(chatsCol, where("participants", "array-contains", getCurrentUser().uid), orderBy("updatedAt", "desc")));
+    const chats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    if (chats.length === 0) {
+        chatsContainer.innerHTML = `<div class="empty-state"><i class="fas fa-comments"></i><p>No messages yet</p></div>`;
+        return;
+    }
+    const chatsWithNames = await Promise.all(chats.map(async chat => {
+        const otherId = chat.participants.find(p => p !== getCurrentUser().uid);
+        const user = await getUserData(otherId);
+        return { ...chat, otherUser: { id: otherId, name: user?.name || 'User' } };
+    }));
+    chatsContainer.innerHTML = `<div class="card" style="padding:0;">${chatsWithNames.map(chat => `
+        <div class="chat-item" data-chat-id="${chat.id}" data-user-id="${chat.otherUser.id}" style="display:flex; align-items:center; gap:0.75rem; padding:0.75rem; border-bottom:1px solid var(--border); cursor:pointer;">
+            <div style="width:40px; height:40px; background:var(--gradient); border-radius:50%; display:flex; align-items:center; justify-content:center;">${escapeHtml(chat.otherUser.name?.charAt(0) || 'U')}</div>
+            <div style="flex:1;">
+                <strong>${escapeHtml(chat.otherUser.name)}</strong><br>
+                <span style="font-size:0.7rem; color:var(--gray);">${escapeHtml(chat.lastMessage || 'No messages')}</span>
+            </div>
+            <div style="font-size:0.7rem; color:var(--gray);">${getTimeAgo(chat.updatedAt)}</div>
+        </div>
+    `).join('')}</div>`;
+    document.querySelectorAll('.chat-item').forEach(item => {
+        item.onclick = () => openChat(item.dataset.chatId, item.dataset.userId);
+    });
+}
+
+async function openChat(chatId, otherUserId) {
+    currentChatId = chatId;
+    const otherUser = await getUserData(otherUserId);
+    chatAreaView.innerHTML = `
+        <div class="card" style="padding:0; height:70vh; display:flex; flex-direction:column;">
+            <div style="padding:1rem; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:0.75rem;">
+                <button id="backToChats" style="background:none; border:none;"><i class="fas fa-arrow-left"></i></button>
+                <div style="width:40px; height:40px; background:var(--gradient); border-radius:50%; display:flex; align-items:center; justify-content:center;">${escapeHtml(otherUser?.name?.charAt(0) || 'U')}</div>
+                <strong>${escapeHtml(otherUser?.name)}</strong>
+            </div>
+            <div id="chatMessages" style="flex:1; overflow-y:auto; padding:1rem;"></div>
+            <div style="display:flex; gap:0.5rem; padding:1rem; border-top:1px solid var(--border);">
+                <input type="text" id="messageInput" placeholder="Type a message..." style="flex:1; padding:0.75rem; border:1px solid var(--border); border-radius:2rem;">
+                <button id="sendMsg" style="width:auto; padding:0.75rem 1.5rem;"><i class="fas fa-paper-plane"></i></button>
+            </div>
+        </div>
+    `;
+    document.getElementById("backToChats").onclick = () => {
+        if (messagesUnsubscribe) messagesUnsubscribe();
+        currentChatId = null;
+        loadChats();
+        chatAreaView.innerHTML = '';
+    };
+    if (messagesUnsubscribe) messagesUnsubscribe();
+    messagesUnsubscribe = onSnapshot(query(messagesCol, where("chatId", "==", chatId), orderBy("createdAt", "asc")), (snapshot) => {
+        const messages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const messagesContainer = document.getElementById("chatMessages");
+        if (messagesContainer) {
+            messagesContainer.innerHTML = messages.map(msg => `
+                <div style="display:flex; justify-content:${msg.senderId === getCurrentUser().uid ? 'flex-end' : 'flex-start'}; margin-bottom:0.5rem;">
+                    <div style="max-width:70%; padding:0.6rem 1rem; border-radius:1rem; background:${msg.senderId === getCurrentUser().uid ? 'var(--gradient)' : 'var(--light)'}; color:${msg.senderId === getCurrentUser().uid ? 'white' : 'var(--dark)'};">${escapeHtml(msg.text)}<div style="font-size:0.6rem; opacity:0.7;">${getTimeAgo(msg.createdAt)}</div></div>
+                </div>
+            `).join('');
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+        // Batch mark as read
+        const batch = writeBatch(db);
+        messages.forEach(msg => {
+            if (msg.senderId !== getCurrentUser().uid && !msg.read) {
+                batch.update(doc(messagesCol, msg.id), { read: true });
+            }
+        });
+        batch.commit();
+    });
+    document.getElementById("sendMsg").onclick = async () => {
+        const input = document.getElementById("messageInput");
+        const text = input.value.trim();
+        if (!text) return;
+        await addDoc(messagesCol, {
+            chatId,
+            senderId: getCurrentUser().uid,
+            text,
+            read: false,
+            createdAt: new Date()
+        });
+        await updateDoc(doc(chatsCol, chatId), {
+            lastMessage: text,
+            updatedAt: new Date()
+        });
+        input.value = '';
+    };
+}
