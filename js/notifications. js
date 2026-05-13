@@ -1,1 +1,37 @@
+import { db } from "./firebase-config.js";
+import { collection, query, where, orderBy, limit, getDocs, updateDoc, writeBatch } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { escapeHtml, getTimeAgo } from "./utils.js";
+import { getCurrentUser } from "./auth.js";
 
+const notificationsCol = collection(db, "notifications");
+
+let notificationsContainer = null;
+
+export async function renderNotifications(container) {
+    notificationsContainer = container;
+    await loadNotifications();
+}
+
+async function loadNotifications() {
+    if (!notificationsContainer) return;
+    notificationsContainer.innerHTML = `<div class="loader"></div>`;
+    const snapshot = await getDocs(query(notificationsCol, where("userId", "==", getCurrentUser().uid), orderBy("createdAt", "desc"), limit(50)));
+    const notifications = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    if (notifications.length === 0) {
+        notificationsContainer.innerHTML = `<div class="empty-state"><i class="fas fa-bell"></i><p>No notifications</p></div>`;
+        return;
+    }
+    notificationsContainer.innerHTML = notifications.map(n => `
+        <div class="card">
+            <div style="font-weight:600;">${escapeHtml(n.title)}</div>
+            <div style="font-size:0.8rem;">${escapeHtml(n.message)}</div>
+            <div style="font-size:0.7rem; color:var(--gray); margin-top:0.25rem;">${getTimeAgo(n.createdAt)}</div>
+        </div>
+    `).join('');
+    // Mark as read
+    const batch = writeBatch(db);
+    snapshot.docs.forEach(doc => {
+        if (!doc.data().read) batch.update(doc.ref, { read: true });
+    });
+    batch.commit();
+}
