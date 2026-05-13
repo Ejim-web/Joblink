@@ -1,1 +1,172 @@
+import { db } from "./firebase-config.js";
+import { collection, query, orderBy, limit, startAfter, getDocs, addDoc, updateDoc, doc, deleteDoc, where, increment, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
+import { escapeHtml, getTimeAgo, showToast, getUserData } from "./utils.js";
+import { getCurrentUser, getCurrentUserData } from "./auth.js";
 
+const postsCol = collection(db, "posts");
+const likesCol = collection(db, "likes");
+const commentsCol = collection(db, "comments");
+const storage = getStorage();
+
+let feedContainer = null;
+let lastPostDoc = null;
+let isLoading = false;
+let hasMore = true;
+let postsUnsubscribe = null;
+
+export async function renderFeed(container) {
+    feedContainer = container;
+    if (postsUnsubscribe) postsUnsubscribe();
+    await loadFeed(true);
+}
+
+export async function loadFeed(reset = true) {
+    if (!feedContainer) return;
+    if (reset) {
+        feedContainer.innerHTML = `<div class="skeleton-card skeleton"></div><div class="skeleton-card skeleton"></div>`;
+        lastPostDoc = null;
+        hasMore = true;
+    }
+    if (isLoading || !hasMore) return;
+    isLoading = true;
+
+    let q = query(postsCol, orderBy("timestamp", "desc"), limit(10));
+    if (lastPostDoc) q = query(postsCol, orderBy("timestamp", "desc"), startAfter(lastPostDoc), limit(10));
+    const snapshot = await getDocs(q);
+    lastPostDoc = snapshot.docs[snapshot.docs.length - 1];
+    hasMore = snapshot.docs.length === 10;
+    const posts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    // Get user likes in batch
+    const userLikes = new Set();
+    const likesSnapshot = await getDocs(query(likesCol, where("userId", "==", getCurrentUser().uid)));
+    likesSnapshot.forEach(d => userLikes.add(d.data().postId));
+
+    const newHtml = posts.map(post => `
+        <div class="card" data-post-id="${post.id}">
+            <div style="display:flex; gap:0.75rem; margin-bottom:1rem;">
+                <div style="width:48px; height:48px; background:var(--gradient); border-radius:50%; display:flex; align-items:center; justify-content:center;">${escapeHtml(post.authorName?.charAt(0) || 'U')}</div>
+                <div><div style="font-weight:700;">${escapeHtml(post.authorName)}</div><div style="font-size:0.7rem; color:var(--gray);">${getTimeAgo(post.timestamp)}</div></div>
+            </div>
+            <div><p>${escapeHtml(post.content)}</p>${post.imageUrl ? `<img src="${post.imageUrl}" style="width:100%; border-radius:1rem; margin-top:0.75rem;">` : ''}</div>
+            <div style="display:flex; gap:1rem; padding:0.75rem 0; margin-top:0.5rem;">
+                <span><i class="fas fa-heart"></i> <span class="like-count-${post.id}">${post.likesCount || 0}</span></span>
+                <span><i class="fas fa-comment"></i> ${post.commentsCount || 0}</span>
+            </div>
+            <div style="display:flex; gap:1rem; padding-top:0.5rem;">
+                <button class="like-post ${userLikes.has(post.id) ? 'liked' : ''}" data-id="${post.id}" style="flex:1; background:none; border:none; padding:0.5rem; border-radius:0.5rem; cursor:pointer;"><i class="fas fa-heart"></i> ${userLikes.has(post.id) ? 'Liked' : 'Like'}</button>
+                <button class="comment-post" data-id="${post.id}" style="flex:1; background:none; border:none; padding:0.5rem; border-radius:0.5rem; cursor:pointer;"><i class="far fa-comment"></i> Comment</button>
+            </div>
+            <div id="comments-${post.id}" style="display:none; margin-top:1rem;"></div>
+        </div>
+    `).join('');
+
+    feedContainer.innerHTML = reset ? newHtml : feedContainer.innerHTML + newHtml;
+    if (hasMore && !reset) {
+        const loadMoreBtn = document.createElement("button");
+        loadMoreBtn.textContent = "Load More";
+        loadMoreBtn.className = "btn-primary";
+        loadMoreBtn.style.width = "auto";
+        loadMoreBtn.style.padding = "0.5rem 1rem";
+        loadMoreBtn.style.marginTop = "0.5rem";
+        loadMoreBtn.onclick = () => loadFeed(false);
+        feedContainer.appendChild(loadMoreBtn);
+    }
+
+    attachLikeHandlers();
+    attachCommentHandlers();
+    isLoading = false;
+}
+
+function attachLikeHandlers() {
+    document.querySelectorAll('.like-post').forEach(btn => {
+        btn.onclick = async () => {
+            const postId = btn.dataset.id;
+            const existing = await getDocs(query(likesCol, where("postId", "==", postId), where("userId", "==", getCurrentUser().uid)));
+            const countSpan = document.querySelector(`.like-count-${postId}`);
+            const currentCount = parseInt(countSpan?.innerText || 0);
+
+            if (existing.empty) {
+                await addDoc(likesCol, { postId, userId: getCurrentUser().uid, createdAt: new Date() });
+                await updateDoc(doc(postsCol, postId), { likesCount: increment(1) });
+                if (countSpan) countSpan.innerText = currentCount + 1;
+                btn.classList.add('liked');
+                btn.innerHTML = '<i class="fas fa-heart"></i> Liked';
+            } else {
+                await deleteDoc(existing.docs[0].ref);
+                await updateDoc(doc(postsCol, postId), { likesCount: increment(-1) });
+                if (countSpan) countSpan.innerText = currentCount - 1;
+                btn.classList.remove('liked');
+                btn.innerHTML = '<i class="fas fa-heart"></i> Like';
+            }
+        };
+    });
+}
+
+function attachCommentHandlers() {
+    document.querySelectorAll('.comment-post').forEach(btn => {
+        btn.onclick = async () => {
+            const postId = btn.dataset.id;
+            const commentsDiv = document.getElementById(`comments-${postId}`);
+            if (commentsDiv.style.display === 'none') {
+                const commentsSnapshot = await getDocs(query(commentsCol, where("postId", "==", postId), orderBy("timestamp", "asc")));
+                const commentsHtml = commentsSnapshot.docs.map(c => `
+                    <div class="comment" style="display:flex; gap:0.5rem; margin-bottom:0.75rem; padding:0.5rem; background:var(--light); border-radius:0.75rem;">
+                        <div style="width:32px; height:32px; background:var(--gradient); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.8rem;">${escapeHtml(c.data().authorName?.charAt(0) || 'U')}</div>
+                        <div><div style="font-weight:600; font-size:0.75rem;">${escapeHtml(c.data().authorName)}</div><div style="font-size:0.8rem;">${escapeHtml(c.data().text)}</div><div style="font-size:0.6rem; color:var(--gray);">${getTimeAgo(c.data().timestamp)}</div></div>
+                    </div>
+                `).join('');
+                commentsDiv.innerHTML = commentsHtml + `
+                    <div style="display:flex; gap:0.5rem; margin-top:0.75rem;">
+                        <input type="text" id="comment-text-${postId}" placeholder="Write a comment..." style="flex:1; padding:0.5rem; border:1px solid var(--border); border-radius:2rem;">
+                        <button class="submit-comment" data-id="${postId}" style="width:auto; padding:0.5rem 1rem; border:none; border-radius:2rem; background:var(--gradient); color:white;">Post</button>
+                    </div>
+                `;
+                commentsDiv.style.display = 'block';
+
+                const submitBtn = commentsDiv.querySelector('.submit-comment');
+                submitBtn.onclick = async () => {
+                    const text = document.getElementById(`comment-text-${postId}`).value;
+                    if (!text.trim()) return;
+                    await addDoc(commentsCol, {
+                        postId,
+                        userId: getCurrentUser().uid,
+                        authorName: getCurrentUserData().name,
+                        text: text.trim(),
+                        timestamp: new Date()
+                    });
+                    await updateDoc(doc(postsCol, postId), { commentsCount: increment(1) });
+                    document.getElementById(`comment-text-${postId}`).value = '';
+                    loadFeed(true); // Refresh comments without full reload? For simplicity reload feed.
+                };
+            } else {
+                commentsDiv.style.display = 'none';
+            }
+        };
+    });
+}
+
+export async function createPost(content, imageFile) {
+    let imageUrl = null;
+    if (imageFile) {
+        const storageRef = ref(storage, `posts/${Date.now()}_${imageFile.name}`);
+        await uploadBytes(storageRef, imageFile);
+        imageUrl = await getDownloadURL(storageRef);
+    }
+    await addDoc(postsCol, {
+        content,
+        imageUrl,
+        authorId: getCurrentUser().uid,
+        authorName: getCurrentUserData().name,
+        timestamp: new Date(),
+        likesCount: 0,
+        commentsCount: 0
+    });
+    showToast("Post created!");
+    loadFeed(true);
+}
+
+export function cleanupFeed() {
+    if (postsUnsubscribe) postsUnsubscribe();
+}
